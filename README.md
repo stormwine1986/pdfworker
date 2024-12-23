@@ -41,3 +41,10 @@ change them use yourself information.
 ```bash
 npm start
 ```
+
+## How to run it in docker
+
+```bash
+docker build -t pdfworker .
+docker run -d -p 3000:3000 pdfworker
+```

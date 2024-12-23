@@ -24,6 +24,7 @@ class PdfWorker {
 
         try {
             browser = await puppeteer.launch({
+                args: ['--no-sandbox', '--disable-setuid-sandbox'],
                 executablePath: '/usr/bin/google-chrome',
                 headless: true
             });
