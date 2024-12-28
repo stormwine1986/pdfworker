@@ -1,0 +1,53 @@
+[[heading]]
+level = 1
+greedy = true
+# font.name = "Unnamed-T3"
+font.size = 16.302871704101562
+# font.size_tolerance = 1e-5
+# font.color = -0x1000000
+# font.superscript = false
+# font.italic = false
+# font.serif = false
+# font.monospace = false
+# font.bold = false
+# bbox.left = 49.290672302246094
+# bbox.top = 49.58611297607422
+# bbox.right = 81.89641571044922
+# bbox.bottom = 65.88898468017578
+# bbox.tolerance = 1e-5
+
+[[heading]]
+level = 2
+greedy = true
+# font.name = "Unnamed-T3"
+font.size = 15.048805236816406
+# font.size_tolerance = 1e-5
+# font.color = -0x1000000
+# font.superscript = false
+# font.italic = false
+# font.serif = false
+# font.monospace = false
+# font.bold = false
+# bbox.left = 49.290672302246094
+# bbox.top = 166.19422912597656
+# bbox.right = 79.3882827758789
+# bbox.bottom = 181.34397888183594
+# bbox.tolerance = 1e-5
+
+[[heading]]
+level = 3
+greedy = true
+# font.name = "LiberationSans-Bold"
+font.size = 13.794737815856934
+# font.size_tolerance = 1e-5
+# font.color = -0x1000000
+# font.superscript = false
+# font.italic = false
+# font.serif = false
+# font.monospace = false
+# font.bold = true
+# bbox.left = 49.290672302246094
+# bbox.top = 645.0252075195312
+# bbox.right = 101.42098999023438
+# bbox.bottom = 660.4365234375
+# bbox.tolerance = 1e-5
