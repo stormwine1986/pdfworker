@@ -128,6 +128,8 @@ class PdfWorker {
 
                 // Copy pages from TOC document
                 const tocPages = await mainDoc.copyPages(tocDoc, tocDoc.getPageIndices());
+
+                tocPages.reverse();
                 
                 // Insert TOC pages at the beginning
                 for (const page of tocPages) {
