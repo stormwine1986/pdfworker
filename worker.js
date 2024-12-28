@@ -12,6 +12,18 @@ require('dotenv').config();
 
 class PdfWorker {
 
+    constructor(pdfDir) {
+
+        const pdfId = uuidv4();
+
+        this.pdfDir = pdfDir;
+        this.configDir = path.join(this.pdfDir, 'config');
+        this.recipePath = path.join(this.configDir, 'recipe.toml');
+        this.filePath = path.join(this.pdfDir, `${pdfId}.pdf`);
+        this.outputPath = path.join(this.pdfDir, `${pdfId}_out.pdf`);
+        this.tocPath = path.join(this.pdfDir, `${pdfId}_toc.txt`);
+    }
+
     async generatePdf(task_id, taskData) {
         
         const totalStartTime = performance.now();
@@ -80,7 +92,7 @@ class PdfWorker {
                 displayHeaderFooter: true,
                 headerTemplate,
                 footerTemplate,
-                margin: { // 调整这里的参数，需要重新生成 recipe.toml
+                margin: { // 注意：调整这里的参数，需要重新生成 recipe.toml
                     top: '50px',
                     right: '50px',
                     bottom: '50px',
@@ -92,33 +104,22 @@ class PdfWorker {
             const convertTimeMs = convertEndTime - convertStartTime;
             console.log(`PDF convert took: ${(convertTimeMs / 1000).toFixed(2)} seconds`);
 
-            // Save PDF file with UUID
-            const pdfDir = path.join(process.env.HOME, '.pdfworker');
-            const configDir = path.join(pdfDir, 'config');
-            const recipePath = path.join(configDir, 'recipe.toml');
-            const filePath = path.join(pdfDir, `${pdfId}.pdf`);
-            const outputPath = path.join(pdfDir, `${pdfId}_out.pdf`);
-            const tocPath = path.join(pdfDir, `${pdfId}_toc.txt`);
-
-            await fs.writeFile(filePath, pdfBuffer);
-            console.log(`PDF saved to: ${filePath}`);
+            await fs.writeFile(this.filePath, pdfBuffer);
+            console.log(`PDF saved to: ${this.filePath}`);
 
             try {
                 // generate TOC
                 const tocStartTime = performance.now();
-                await execPromise(`pdftocgen "${filePath}" < "${recipePath}" > ${tocPath}`);
-                await execPromise(`pdftocgen "${filePath}" < "${recipePath}" | pdftocio "${filePath}"`);
-                const pdfWithToc = await fs.readFile(outputPath);
+                await execPromise(`pdftocgen "${this.filePath}" < "${this.recipePath}" > ${this.tocPath}`);
+                await execPromise(`pdftocgen "${this.filePath}" < "${this.recipePath}" | pdftocio "${this.filePath}"`);
+                const pdfWithToc = await fs.readFile(this.outputPath);
 
                 const tocEndTime = performance.now();
                 const tocTimeMs = tocEndTime - tocStartTime;
                 console.log(`TOC generation took: ${(tocTimeMs / 1000).toFixed(2)} seconds`);
 
                 // generate TOC page
-                const tocPdfBuffer = await this.#generateTocPage(browser, tocPath);
-
-                // generate title page
-                // const titlePdfBuffer = await this.#generateTitlePage(browser, taskData);
+                const tocPdfBuffer = await this.#generateTocPage(browser, this.tocPath);
 
                 // Merge
                 const mergeStartTime = performance.now();
@@ -151,9 +152,9 @@ class PdfWorker {
             } finally {
                 // Cleanup temporary files
                 try {
-                    await fs.unlink(filePath);
-                    await fs.unlink(outputPath);
-                    await fs.unlink(tocPath);
+                    await fs.unlink(this.filePath);
+                    await fs.unlink(this.outputPath);
+                    await fs.unlink(this.tocPath);
                 } catch (err) {
                     console.error('Cleanup error:', err);
                 }
@@ -248,10 +249,6 @@ class PdfWorker {
         console.log(`Toc page generation took: ${(tocPageTimeMs / 1000).toFixed(2)} seconds`);
 
         return tocPdfBuffer
-    }
-
-    async #generateTitlePage(browser, taskData){
-
     }
 }
 
