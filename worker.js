@@ -12,21 +12,26 @@ require('dotenv').config();
 
 class PdfWorker {
 
-    constructor(pdfDir) {
+    constructor(pdfDir, logger) {
 
-        const pdfId = uuidv4();
+        this.pdfId = uuidv4();
+
+        this.logger = logger
 
         this.pdfDir = pdfDir;
         this.configDir = path.join(this.pdfDir, 'config');
         this.recipePath = path.join(this.configDir, 'recipe.toml');
-        this.filePath = path.join(this.pdfDir, `${pdfId}.pdf`);
-        this.outputPath = path.join(this.pdfDir, `${pdfId}_out.pdf`);
-        this.tocPath = path.join(this.pdfDir, `${pdfId}_toc.txt`);
+        this.filePath = path.join(this.pdfDir, `${this.pdfId}.pdf`);
+        this.outputPath = path.join(this.pdfDir, `${this.pdfId}_out.pdf`);
+        this.tocPath = path.join(this.pdfDir, `${this.pdfId}_toc.txt`);
     }
 
     async generatePdf(task_id, taskData) {
         
         const totalStartTime = performance.now();
+
+        this.logger.info(`PDF,${this.pdfId},Start`);
+
         let browser = null;
         let pdfBuffer = null;
 
@@ -44,8 +49,6 @@ class PdfWorker {
         if (!username || !password) {
             throw new Error('Invalid CBM_API_KEY format. Expected base64 encoded username:password');
         }
-
-        const pdfId = uuidv4();
         
         try {
             const convertStartTime = performance.now();
@@ -70,7 +73,7 @@ class PdfWorker {
                 console.error(`Title mismatch - Expected: "${taskData.name}", Got: "${pageTitle}"`);
                 throw new Error('Page title does not match task name');
             }
-            console.log(`Title verified: "${pageTitle}"`);
+            this.logger.info(`PDF,${this.pdfId},Title verified "${pageTitle}"`);
             
             // header of page
             const headerTemplate = `
@@ -102,10 +105,9 @@ class PdfWorker {
 
             const convertEndTime = performance.now();
             const convertTimeMs = convertEndTime - convertStartTime;
-            console.log(`PDF convert took: ${(convertTimeMs / 1000).toFixed(2)} seconds`);
+            this.logger.info(`PDF,${this.pdfId},PDF convert took: ${(convertTimeMs / 1000).toFixed(2)} seconds`);
 
             await fs.writeFile(this.filePath, pdfBuffer);
-            console.log(`PDF saved to: ${this.filePath}`);
 
             try {
                 // generate TOC
@@ -116,7 +118,7 @@ class PdfWorker {
 
                 const tocEndTime = performance.now();
                 const tocTimeMs = tocEndTime - tocStartTime;
-                console.log(`TOC generation took: ${(tocTimeMs / 1000).toFixed(2)} seconds`);
+                this.logger.info(`PDF,${this.pdfId},TOC generation took: ${(tocTimeMs / 1000).toFixed(2)} seconds`);
 
                 // generate TOC page
                 const tocPdfBuffer = await this.#generateTocPage(browser, this.tocPath);
@@ -142,12 +144,12 @@ class PdfWorker {
 
                 const mergeEndTime = performance.now();
                 const mergeTimeMs = mergeEndTime - mergeStartTime;
-                console.log(`Merge generation took: ${(mergeTimeMs / 1000).toFixed(2)} seconds`);
+                this.logger.info(`PDF,${this.pdfId},Merge generation took: ${(mergeTimeMs / 1000).toFixed(2)} seconds`);
 
                 return Buffer.from(finalPdfBytes);
 
             } catch (error) {
-                console.error('TOC generation error:', error);
+                this.logger.error(`PDF,${this.pdfId},TOC generation error: ${error}`)
                 return pdfBuffer; // Return original if TOC generation fails
             } finally {
                 // Cleanup temporary files
@@ -166,7 +168,7 @@ class PdfWorker {
             }
             const totalEndTime = performance.now();
             const totalTimeMs = totalEndTime - totalStartTime;
-            console.log(`total generation took: ${(totalTimeMs / 1000).toFixed(2)} seconds`);
+            this.logger.info(`PDF,${this.pdfId},Total generation took: ${(totalTimeMs / 1000).toFixed(2)} seconds`);
         }
     }
 
