@@ -40,7 +40,7 @@ conda activate pdfworker
 pip install -r requirements.txt
 cp .env.sample .env
 ```
-change them use yourself information.
+change `.env` use yourself information.
 
 ```bash
 npm start
@@ -64,4 +64,21 @@ docker run -d \
     -e CBM_API_KEY=Ym9uZDowMDc= \
     -e SECRET=attentionisallyouneed! \
     pdfworker
+```
+
+## How to make `recipe.toml`
+
+install required tools.
+
+```bash
+pip install -U pdf.tocgen
+```
+
+use `pdfxmeta` extract heading format, examples:
+
+```bash
+pdfxmeta -p 2 -a 1 task_1103_2024-12-26T13-18-38-046Z.pdf "Chapter1" >> recipe.toml
+pdfxmeta -p 2 -a 2 task_1103_2024-12-26T13-18-38-046Z.pdf "Chapter1.1" >> recipe.toml
+pdfxmeta -p 2 -a 3 task_1103_2024-12-26T13-18-38-046Z.pdf "Chapter1.1.1" >> recipe.toml
+pdfxmeta -p 2 -a 4 task_1103_2024-12-26T13-18-38-046Z.pdf "Chapter1.1.1" >> recipe.toml
 ```
