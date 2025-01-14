@@ -68,6 +68,7 @@ const port = 5000;
 
 app.get('/generate-pdf/:task_id/:user_id', async (req, res) => {
     const { task_id, user_id } = req.params;
+    const template_name = req.query.template_name;
     logger.info(`PDF generation requested for task ${task_id} by user ${user_id}`);
     
     const token = req.headers.authorization?.split(' ')[1];
@@ -109,7 +110,7 @@ app.get('/generate-pdf/:task_id/:user_id', async (req, res) => {
         logger.info(`fetch data for task ${task_id}, task.name = ${responseData.name}`);
 
         const worker = new PdfWorker(pdfDir, logger);
-        const pdfBuffer = await worker.generatePdf(task_id, responseData);
+        const pdfBuffer = await worker.generatePdf(task_id, responseData, template_name);
 
         const fileName = responseData.name ? 
             `${responseData.name.replace(/[^a-zA-Z0-9-_]/g, '_')}.pdf` : 

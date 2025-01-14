@@ -26,7 +26,7 @@ class PdfWorker {
         this.tocPath = path.join(this.pdfDir, `${this.pdfId}_toc.txt`);
     }
 
-    async generatePdf(task_id, taskData) {
+    async generatePdf(task_id, taskData, template_name) {
         
         const totalStartTime = performance.now();
 
@@ -64,7 +64,18 @@ class PdfWorker {
             await page.type('#password', password);
             await page.keyboard.press('Enter');
             await page.waitForNavigation({ waitUntil: 'networkidle2' });
-            await page.goto(`${process.env.CBM_BASE_URL}/dtas/preview.spr?task_id=${task_id}`, { waitUntil: 'networkidle2' });
+            
+            const params = new URLSearchParams({
+                task_id: task_id
+            });
+            
+            if (template_name?.trim()) {
+                params.append('template_name', template_name.trim());
+            }
+            
+            const preview_url = `${process.env.CBM_BASE_URL}/dtas/preview.spr?${params.toString()}`;
+            
+            await page.goto(preview_url, { waitUntil: 'networkidle2' });
 
             // Check page title matches task name
             await page.waitForSelector('title');
