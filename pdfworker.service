@@ -1,0 +1,14 @@
+[Unit]
+Description=PDF Worker Node.js Application
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/pdfworker
+ExecStart=/bin/bash -c 'source .venv/bin/activate && npm start'
+Restart=on-failure
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
