@@ -164,44 +164,19 @@ app.get('/generate-pdf/:task_id/:user_id', async (req, res) => {
         res.write(pdfBuffer);
         res.end();
     } catch (error) {
-        logger.error('Error generating PDF:', { error, task_id, user_id });
-        res.status(500).send('Internal server error');
-    }
-});
-
-app.get('/generate-word/:task_id/:user_id', async (req, res) => {
-    const { task_id, user_id } = req.params;
-    const template_name = req.query.template_name;
-    logger.info(`Word generation requested for task ${task_id} by user ${user_id}`);
-
-    // const token = req.headers.authorization?.split(' ')[1];
-    
-    // if (!token) {
-    //     return res.status(401).send('No token provided');
-    // }
-
-    try {
-        // const decoded = jwt.verify(token, process.env.SECRET);
-
-        // if (decoded.task_id != task_id || decoded.user_id != user_id) {
-        //     return res.status(401).send('Invalid token payload');
-        // }
-
-        // if (Date.now() - decoded.timestamp > 15000) {
-        //     return res.status(401).send('Token expired');
-        // }
-
-        // from CBM fetch task detail
-        const taskDetails = await fetchCBMTaskDetails(task_id);
-        logger.info(`fetch data for task ${task_id}, task.name = ${taskDetails.name}`);
-
-        // from CBM fetch tracker detail
-        const trackerJson = await fetchTrackerDetails(taskDetails.tracker.id);
-        logger.info(`Retrieved tracker ${trackerJson.id}, description = ${trackerJson.description}`);
-
-
-    } catch (error) {
-        logger.error('Error generating Word:', { error, task_id, user_id });
+        logger.error('Error generating PDF:', {
+            error: {
+                message: error.message,
+                name: error.name,
+                stack: error.stack,
+                code: error.code
+            },
+            context: {
+                task_id,
+                template_name,
+                timestamp: new Date().toISOString()
+            }
+        });
         res.status(500).send('Internal server error');
     }
 });
