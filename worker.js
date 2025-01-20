@@ -26,7 +26,7 @@ class PdfWorker {
         this.tocPath = path.join(this.pdfDir, `${this.pdfId}_toc.txt`);
     }
 
-    async generatePdf(task_id, taskData, template_name) {
+    async generatePdf(task_id, taskData, template_name, trackerData) {
         
         const totalStartTime = performance.now();
 
@@ -88,15 +88,21 @@ class PdfWorker {
             
             // header of page
             const headerTemplate = `
-                <div style="font-size: 10px; width: 100%; text-align: center;">
-                    <span class="title"></span>
+                <div style="font-size: 10px; width: 100%; text-align: center; vertical-align: bottom; padding: 20px 0px;">
+                    <span>${trackerData.description}</span>
                 </div>
             `;
 
             // footer of page
             const footerTemplate = `
                 <div style="font-size: 10px; width: 100%; text-align: center;">
-                    <span><span class="pageNumber"></span> / <span class="totalPages"></span></span>
+                    <table style="width: 100%; padding: 0px 50px;">
+                        <tr>
+                            <td style="text-align: left; width: 30%;">@ copyright</td>
+                            <td style="text-align: center; vertical-align: top;"><span class="title"></span></td>
+                            <td style="text-align: right; width: 30%; vertical-align: top;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></td>
+                        </tr>
+                    </table>
                 </div>
             `;
 
@@ -106,11 +112,11 @@ class PdfWorker {
                 displayHeaderFooter: true,
                 headerTemplate,
                 footerTemplate,
-                margin: { // 注意：调整这里的参数，需要重新生成 recipe.toml
-                    top: '50px',
-                    right: '50px',
-                    bottom: '50px',
-                    left: '50px'
+                margin: { 
+                    top: '70px',
+                    right: '50px', // 注意：调整这里的参数，需要重新生成 recipe.toml
+                    bottom: '70px',
+                    left: '50px' // 注意：调整这里的参数，需要重新生成 recipe.toml
                 },
             });
 
