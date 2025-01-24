@@ -130,7 +130,7 @@ class PdfWorker {
                 // generate TOC
                 const tocStartTime = performance.now();
                 await execPromise(`pdftocgen "${this.filePath}" < "${this.recipePath}" > ${this.tocPath}`);
-                await execPromise(`pdftocgen "${this.filePath}" < "${this.recipePath}" | pdftocio "${this.filePath}"`);
+                await execPromise(`pdftocgen -v "${this.filePath}" < "${this.recipePath}" | pdftocio "${this.filePath}"`);
                 const pdfWithToc = await fs.readFile(this.outputPath);
 
                 const tocEndTime = performance.now();
