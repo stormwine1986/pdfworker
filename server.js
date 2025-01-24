@@ -74,7 +74,7 @@ app.use((req, res, next) => {
     if (!req.timedout) next();
 });
 
-// Add new function
+
 async function fetchCBMTaskDetails(taskId) {
     try {
         const cbmTaskUrl = `${process.env.CBM_BASE_URL}/api/v3/items/${taskId}`;
@@ -118,23 +118,25 @@ async function fetchTrackerDetails(trackerId) {
 }
 
 app.get('/generate-pdf/:task_id/:user_id', async (req, res) => {
-    const { task_id, user_id } = req.params;
-    const template_name = req.query.template_name;
-    logger.info(`PDF generation requested for task ${task_id} by user ${user_id}`);
-    
-    const token = req.headers.authorization?.split(' ')[1];
-    
-    if (!token) {
-        return res.status(401).send('No token provided');
-    }
+
+    increment()
 
     try {
-        const decoded = jwt.verify(token, process.env.SECRET);
+        // verify parameters
+        const { task_id, user_id } = req.params;
+        const template_name = req.query.template_name;
+        logger.info(`PDF generation requested for task ${task_id} by user ${user_id}`);
+        
+        const token = req.headers.authorization?.split(' ')[1];
+        if (!token) {
+            return res.status(401).send('No token provided');
+        }
 
+        // verify jwt
+        const decoded = jwt.verify(token, process.env.SECRET);
         if (decoded.task_id != task_id || decoded.user_id != user_id) {
             return res.status(401).send('Invalid token payload');
         }
-
         if (Date.now() - decoded.timestamp > 15000) {
             return res.status(401).send('Token expired');
         }
@@ -178,7 +180,54 @@ app.get('/generate-pdf/:task_id/:user_id', async (req, res) => {
             }
         });
         res.status(500).send('Internal server error');
+    } finally {
+        decrement()
     }
+});
+
+// 创建一个共享的数组缓冲区
+const sab = new SharedArrayBuffer(4); // 4 字节用于存储一个整数
+const counter = new Int32Array(sab); // 创建一个 32 位整数数组
+
+// 增加计数器的函数
+function increment() {
+    Atomics.add(counter, 0, 1); // 原子加1
+}
+
+// 减少计数器的函数
+function decrement() {
+    Atomics.sub(counter, 0, 1); // 原子减1
+}
+
+// 获取当前计数器值的函数
+function getCount() {
+    return Atomics.load(counter, 0); // 原子读取当前值
+}
+
+// Print counter value every 5 seconds
+const counterMonitor = setInterval(() => {
+    try {
+        const count = getCount();
+        console.log(`[${new Date().toISOString()}] current process count: ${count}`);
+    } catch (error) {
+        console.error('error monitoring counter:', error);
+    }
+}, 5000);
+
+// Add cleanup handler
+process.on('SIGTERM', () => {
+    clearInterval(counterMonitor);
+    process.exit(0);
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.status(200).json({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        activeWorkerCount: getCount()
+    });
 });
 
 app.listen(port, '0.0.0.0', () => {
