@@ -222,11 +222,25 @@ process.on('SIGTERM', () => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
+    const currentCount = getCount();
+    const maxProcesses = parseInt(process.env.MAX_PROCESS_NUM || '10');
+    
+    if (currentCount > maxProcesses) {
+        return res.status(503).json({
+            status: 'overloaded',
+            timestamp: new Date().toISOString(),
+            uptime: process.uptime(),
+            activeWorkerCount: currentCount,
+            maxWorkers: maxProcesses
+        });
+    }
+
     res.status(200).json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
-        activeWorkerCount: getCount()
+        activeWorkerCount: currentCount,
+        maxWorkers: maxProcesses
     });
 });
 
