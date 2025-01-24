@@ -204,16 +204,6 @@ function getCount() {
     return Atomics.load(counter, 0); // 原子读取当前值
 }
 
-// Print counter value every 5 seconds
-const counterMonitor = setInterval(() => {
-    try {
-        const count = getCount();
-        console.log(`[${new Date().toISOString()}] current process count: ${count}`);
-    } catch (error) {
-        console.error('error monitoring counter:', error);
-    }
-}, 5000);
-
 // Add cleanup handler
 process.on('SIGTERM', () => {
     clearInterval(counterMonitor);
