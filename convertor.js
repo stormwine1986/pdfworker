@@ -27,7 +27,7 @@ class Convertor {
             await fs.copyFile(docxPath, tempDocxPath);
             
             // Convert to PDF using LibreOffice
-            const cmd = `libreoffice --headless --convert-to pdf --outdir "${this.pdfDir}" "${tempDocxPath}"`;
+            const cmd = `soffice --headless --convert-to pdf --outdir "${this.pdfDir}" "${tempDocxPath}"`;
             await execAsync(cmd);
             
             // Verify PDF was created

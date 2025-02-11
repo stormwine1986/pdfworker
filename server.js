@@ -1,13 +1,13 @@
 require('dotenv').config();
 const express = require('express');
 const PdfWorker = require('./worker');
+const Convertor = require('./convertor')
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
 const winston = require('winston');
 require('winston-daily-rotate-file');
 const timeout = require('connect-timeout');
-
 
 if (!process.env.CBM_BASE_URL) {
     console.error('CBM_BASE_URL environment variable is required');
@@ -68,12 +68,11 @@ process.on('uncaughtException', (error) => {
 const app = express();
 const port = 5000;
 
-app.use(timeout('20m')); // 设置全局超时时间为 20 分钟
+app.use(timeout('30m')); // 设置全局超时时间为 20 分钟
 
 app.use((req, res, next) => {
     if (!req.timedout) next();
 });
-
 
 async function fetchCBMTaskDetails(taskId) {
     try {
@@ -96,24 +95,54 @@ async function fetchCBMTaskDetails(taskId) {
     }
 }
 
-// Add new function at top level
+async function fetchPreviewMetadata(task_id, template_name) {
+    try {
+        const params = new URLSearchParams({
+            task_id: task_id
+        });
+
+        if (template_name?.trim()) {
+            params.append('template_name', template_name.trim());
+        }
+
+        const preview_metadata_url = `${process.env.CBM_BASE_URL}/dtas/preview-metadata.spr?${params.toString()}`;
+
+        const response = await fetch(preview_metadata_url, {
+            headers: {
+                Authorization: `Basic ${process.env.CBM_API_KEY}`,
+                ContentType: 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch preview metadata: ${response.status}`);
+        }
+
+        return await response.json();
+
+    } catch (error) {
+        console.error('Error fetching Preview Metadata:', error);
+        throw error;
+    }
+}
+
 async function fetchTrackerDetails(trackerId) {
     const cbmTrackerUrl = `${process.env.CBM_BASE_URL}/api/v3/trackers/${trackerId}`;
     logger.info(`Fetching tracker ${trackerId} data, url = ${cbmTrackerUrl}`);
-    
+
     const cbmTrackerResponse = await fetch(cbmTrackerUrl, {
         headers: {
             Authorization: `Basic ${process.env.CBM_API_KEY}`,
             ContentType: 'application/json'
         }
     });
-    
+
     const trackerJson = await cbmTrackerResponse.json();
-    
+
     if (cbmTrackerResponse.status !== 200) {
         throw new Error(`Failed to fetch tracker: ${cbmTrackerResponse.status}`);
     }
-    
+
     return trackerJson;
 }
 
@@ -126,7 +155,7 @@ app.get('/generate-pdf/:task_id/:user_id', async (req, res) => {
         const { task_id, user_id } = req.params;
         const template_name = req.query.template_name;
         logger.info(`PDF generation requested for task ${task_id} by user ${user_id}`);
-        
+
         const token = req.headers.authorization?.split(' ')[1];
         if (!token) {
             return res.status(401).send('No token provided');
@@ -149,11 +178,16 @@ app.get('/generate-pdf/:task_id/:user_id', async (req, res) => {
         const trackerJson = await fetchTrackerDetails(taskDetails.tracker.id);
         logger.info(`Retrieved tracker ${trackerJson.id}, description = ${trackerJson.description}`);
 
-        const worker = new PdfWorker(pdfDir, logger);
-        const pdfBuffer = await worker.generatePdf(task_id, taskDetails, template_name, trackerJson);
+        // Fetch preview metadata
+        const previewMetadata = await fetchPreviewMetadata(task_id, template_name);
+        logger.info(`Fetched preview metadata for task ${task_id}`, previewMetadata);
 
-        const fileName = taskDetails.name ? 
-            `${taskDetails.name.replace(/[^a-zA-Z0-9-_]/g, '_')}.pdf` : 
+        const worker = new PdfWorker(pdfDir, logger);
+        // Pass previewMetadata to generatePdf if needed
+        const pdfBuffer = await worker.generatePdf(task_id, taskDetails, template_name, trackerJson, previewMetadata);
+
+        const fileName = taskDetails.name ?
+            `${taskDetails.name.replace(/[^a-zA-Z0-9-_]/g, '_')}.pdf` :
             'output.pdf';
 
         res.set({
@@ -214,7 +248,7 @@ process.on('SIGTERM', () => {
 app.get('/health', (req, res) => {
     const currentCount = getCount();
     const maxProcesses = parseInt(process.env.MAX_PROCESS_NUM || '10');
-    
+
     if (currentCount > maxProcesses) {
         return res.status(503).json({
             status: 'overloaded',

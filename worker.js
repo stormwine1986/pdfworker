@@ -7,17 +7,12 @@ const { exec } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
 
-
 require('dotenv').config();
 
 class PdfWorker {
-
     constructor(pdfDir, logger) {
-
         this.pdfId = uuidv4();
-
-        this.logger = logger
-
+        this.logger = logger;
         this.pdfDir = pdfDir;
         this.configDir = path.join(this.pdfDir, 'config');
         this.recipePath = path.join(this.configDir, 'recipe.toml');
@@ -26,55 +21,42 @@ class PdfWorker {
         this.tocPath = path.join(this.pdfDir, `${this.pdfId}_toc.txt`);
     }
 
-    async generatePdf(task_id, taskData, template_name, trackerData) {
-        
+    async generatePdf(task_id, taskData, template_name, trackerData, previewMetadata) {
         const totalStartTime = performance.now();
-
         this.logger.info(`PDF,${this.pdfId},Start`);
 
         let browser = null;
         let pdfBuffer = null;
 
-        if (!process.env.CBM_BASE_URL) {
-            throw new Error('CBM_BASE_URL environment variable is required');
-        }
-        if (!process.env.CBM_API_KEY) {
-            throw new Error('CBM_API_KEY environment variable is required');
-        }
+        if (!process.env.CBM_BASE_URL) throw new Error('CBM_BASE_URL environment variable is required');
+        if (!process.env.CBM_API_KEY) throw new Error('CBM_API_KEY environment variable is required');
 
-        // Decode base64 credentials
         const decoded = Buffer.from(process.env.CBM_API_KEY, 'base64').toString();
         const [username, password] = decoded.split(':');
+        if (!username || !password) throw new Error('Invalid CBM_API_KEY format. Expected base64 encoded username:password');
 
-        if (!username || !password) {
-            throw new Error('Invalid CBM_API_KEY format. Expected base64 encoded username:password');
-        }
-        
         try {
             const convertStartTime = performance.now();
+
             browser = await puppeteer.launch({
                 args: ['--no-sandbox', '--disable-setuid-sandbox'],
                 executablePath: '/usr/bin/google-chrome',
                 headless: true
             });
+
             const page = await browser.newPage();
-            
+
             await page.goto(`${process.env.CBM_BASE_URL}/login.spr`, { waitUntil: 'networkidle2' });
             await page.type('#user', username);
             await page.type('#password', password);
             await page.keyboard.press('Enter');
             await page.waitForNavigation({ waitUntil: 'networkidle2' });
-            
-            const params = new URLSearchParams({
-                task_id: task_id
-            });
-            
-            if (template_name?.trim()) {
-                params.append('template_name', template_name.trim());
-            }
-            
+
+            const params = new URLSearchParams({ task_id });
+            if (template_name?.trim()) params.append('template_name', template_name.trim());
+
             const preview_url = `${process.env.CBM_BASE_URL}/dtas/preview.spr?${params.toString()}`;
-            
+
             await page.goto(preview_url, { waitUntil: 'networkidle2' });
 
             // Check page title matches task name
@@ -85,16 +67,15 @@ class PdfWorker {
                 throw new Error('Page title does not match task name');
             }
             this.logger.info(`PDF,${this.pdfId},Title verified "${pageTitle}"`);
-            
-            // header of page
-            const headerTemplate = `
+
+            // Use headerTemplate and footerTemplate from previewMetadata if available
+            const headerTemplate = previewMetadata?.headerTemplate || `
                 <div style="font-size: 10px; width: 100%; text-align: center; vertical-align: bottom; padding: 20px 0px;">
                     <span>${trackerData.description}</span>
                 </div>
             `;
 
-            // footer of page
-            const footerTemplate = `
+            const footerTemplate = previewMetadata?.footerTemplate || `
                 <div style="font-size: 10px; width: 100%; text-align: center;">
                     <table style="width: 100%; padding: 0px 50px;">
                         <tr>
@@ -112,86 +93,83 @@ class PdfWorker {
                 displayHeaderFooter: true,
                 headerTemplate,
                 footerTemplate,
-                margin: { 
+                margin: {
                     top: '70px',
-                    right: '50px', // 注意：调整这里的参数，需要重新生成 recipe.toml
+                    right: '50px',
                     bottom: '70px',
-                    left: '50px' // 注意：调整这里的参数，需要重新生成 recipe.toml
+                    left: '50px'
                 },
             });
 
             const convertEndTime = performance.now();
-            const convertTimeMs = convertEndTime - convertStartTime;
-            this.logger.info(`PDF,${this.pdfId},PDF convert took: ${(convertTimeMs / 1000).toFixed(2)} seconds`);
+            this.logger.info(`PDF,${this.pdfId},PDF convert took: ${(convertEndTime - convertStartTime) / 1000} seconds`);
 
             await fs.writeFile(this.filePath, pdfBuffer);
 
-            try {
-                // generate TOC
-                const tocStartTime = performance.now();
-                await execPromise(`pdftocgen "${this.filePath}" < "${this.recipePath}" > ${this.tocPath}`);
-                await execPromise(`pdftocgen -v "${this.filePath}" < "${this.recipePath}" | pdftocio "${this.filePath}"`);
-                const pdfWithToc = await fs.readFile(this.outputPath);
-
-                const tocEndTime = performance.now();
-                const tocTimeMs = tocEndTime - tocStartTime;
-                this.logger.info(`PDF,${this.pdfId},TOC generation took: ${(tocTimeMs / 1000).toFixed(2)} seconds`);
-
-                // generate TOC page
-                const tocPdfBuffer = await this.#generateTocPage(browser, this.tocPath);
-
-                // Merge
-                const mergeStartTime = performance.now();
-                // Load both PDFs
-                const mainDoc = await PDFDocument.load(pdfWithToc);
-                const tocDoc = await PDFDocument.load(tocPdfBuffer);
-
-                // Copy pages from TOC document
-                const tocPages = await mainDoc.copyPages(tocDoc, tocDoc.getPageIndices());
-
-                tocPages.reverse();
-                
-                // Insert TOC pages at the beginning
-                for (const page of tocPages) {
-                    mainDoc.insertPage(0, page);
-                }
-                
-                // Save merged PDF
-                const finalPdfBytes = await mainDoc.save();
-
-                const mergeEndTime = performance.now();
-                const mergeTimeMs = mergeEndTime - mergeStartTime;
-                this.logger.info(`PDF,${this.pdfId},Merge generation took: ${(mergeTimeMs / 1000).toFixed(2)} seconds`);
-
-                return Buffer.from(finalPdfBytes);
-
-            } catch (error) {
-                this.logger.error(`PDF,${this.pdfId},TOC generation error: ${error}`)
-                return pdfBuffer; // Return original if TOC generation fails
-            } finally {
-                // Cleanup temporary files
+            // Check if previewMetadata exists and renderTOC is true
+            if (previewMetadata && previewMetadata.renderTOC === true) {
                 try {
-                    await fs.unlink(this.filePath);
-                    await fs.unlink(this.outputPath);
-                    await fs.unlink(this.tocPath);
-                } catch (err) {
-                    console.error('Cleanup error:', err);
+                    const finalPdfBytes = await this.#generateTocAndMerge(browser);
+                    return Buffer.from(finalPdfBytes);
+                } catch (error) {
+                    this.logger.error(`PDF,${this.pdfId},TOC generation error: ${error}`);
+                    return pdfBuffer; // Return original if TOC generation fails
                 }
             }
 
+            return pdfBuffer;
         } finally {
-            if (browser) {
-                await browser.close();
-            }
+            if (browser) await browser.close();
             const totalEndTime = performance.now();
-            const totalTimeMs = totalEndTime - totalStartTime;
-            this.logger.info(`PDF,${this.pdfId},Total generation took: ${(totalTimeMs / 1000).toFixed(2)} seconds`);
+            this.logger.info(`PDF,${this.pdfId},Total generation took: ${(totalEndTime - totalStartTime) / 1000} seconds`);
         }
     }
 
-    async #generateTocPage(browser, tocPath){
+    async #generateTocAndMerge(browser) {
+        const tocStartTime = performance.now();
+
+        // Generate TOC
+        await execPromise(`pdftocgen "${this.filePath}" < "${this.recipePath}" > ${this.tocPath}`);
+        await execPromise(`pdftocgen -v "${this.filePath}" < "${this.recipePath}" | pdftocio "${this.filePath}"`);
+        const pdfWithToc = await fs.readFile(this.outputPath);
+
+        this.logger.info(`PDF,${this.pdfId},TOC generation took: ${(performance.now() - tocStartTime) / 1000} seconds`);
+
+        // Generate TOC page
+        const tocPdfBuffer = await this.#generateTocPage(browser, this.tocPath);
+
+        // Merge TOC and main PDF
+        const mergeStartTime = performance.now();
+
+        const mainDoc = await PDFDocument.load(pdfWithToc);
+        const tocDoc = await PDFDocument.load(tocPdfBuffer);
+
+        const tocPages = await mainDoc.copyPages(tocDoc, tocDoc.getPageIndices());
+        tocPages.reverse();
+
+        for (const page of tocPages) {
+            mainDoc.insertPage(0, page);
+        }
+
+        const finalPdfBytes = await mainDoc.save();
+
+        this.logger.info(`PDF,${this.pdfId},Merge generation took: ${(performance.now() - mergeStartTime) / 1000} seconds`);
+
+        // Cleanup temporary files
+        try {
+            await fs.unlink(this.filePath);
+            await fs.unlink(this.outputPath);
+            await fs.unlink(this.tocPath);
+        } catch (err) {
+            console.error('Cleanup error:', err);
+        }
+
+        return finalPdfBytes;
+    }
+
+    async #generateTocPage(browser, tocPath) {
         const tocPageStartTime = performance.now();
-        // Read TOC contents
+
         const tocContent = await fs.readFile(tocPath, 'utf-8');
         const tocHtml = `
         <!DOCTYPE html>
@@ -234,7 +212,7 @@ class PdfWorker {
             const indentMatch = line.match(/^(\s*)/);
             const indent = indentMatch ? indentMatch[1].length : 0;
             const [title, page] = line.trim().split(/\s+(?=\d+$)/);
-            
+
             return `<div class="toc-entry" style="padding-left: ${indent * 5}px">
                 <span class="title">${title.replace(/["]/g, '')}</span>
                 <span class="dots"></span>
@@ -244,11 +222,9 @@ class PdfWorker {
 
         const finalHtml = tocHtml + htmlLines + '</body></html>';
 
-        // Convert HTML to PDF using browser
         const page = await browser.newPage();
         await page.setContent(finalHtml);
 
-        // Configure PDF options
         const pdfOptions = {
             format: 'A4',
             margin: {
@@ -260,14 +236,11 @@ class PdfWorker {
             printBackground: false
         };
 
-        // Generate PDF
         const tocPdfBuffer = await page.pdf(pdfOptions);
 
-        const tocPageEndTime = performance.now();
-        const tocPageTimeMs = tocPageEndTime - tocPageStartTime;
-        console.log(`Toc page generation took: ${(tocPageTimeMs / 1000).toFixed(2)} seconds`);
+        this.logger.info(`PDF,${this.pdfId},Toc page generation took: ${(performance.now() - tocPageStartTime) / 1000} seconds`);
 
-        return tocPdfBuffer
+        return tocPdfBuffer;
     }
 }
 
