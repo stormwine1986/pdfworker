@@ -3,6 +3,9 @@ const path = require('path');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
+const { v4: uuidv4 } = require('uuid');
+const AdmZip = require('adm-zip');
+
 
 require('dotenv').config();
 
@@ -17,7 +20,7 @@ class Convertor {
         this.filePath = path.join(this.pdfDir, `${this.pdfId}.cover.pdf`);
     }
 
-    async process(docxPath) {
+    async process(docxPath, data) {
         try {
             // Generate paths
             const docxFileName = `${this.pdfId}.docx`;
@@ -25,6 +28,20 @@ class Convertor {
             
             // Copy and rename source file
             await fs.copyFile(docxPath, tempDocxPath);
+
+            // fill template
+            const zip = new AdmZip(tempDocxPath);
+            const contentEntry = zip.getEntries().find(entry => entry.entryName === 'word/document.xml');
+            if (!contentEntry) {
+                throw new Error('DOCX 文件已损坏');
+            }
+            let content = zip.readAsText(contentEntry);
+            for (const [key, value] of Object.entries(data)) {
+                const searchStr = `«${key}»`;
+                content = content.replace(searchStr, value);
+            }
+            zip.updateFile(contentEntry.entryName, Buffer.from(content));
+            await fs.writeFile(tempDocxPath, zip.toBuffer());
             
             // Convert to PDF using LibreOffice
             const cmd = `soffice --headless --convert-to pdf --outdir "${this.pdfDir}" "${tempDocxPath}"`;
@@ -45,7 +62,6 @@ class Convertor {
             this.logger.error(`PDF conversion failed: ${error.message}`);
             throw new Error(`Failed to convert document: ${error.message}`);
         } finally {
-            // Cleanup temp DOCX in finally block to ensure it runs
             const tempDocxPath = path.join(this.pdfDir, `${this.pdfId}.docx`);
             try {
                 await fs.access(tempDocxPath);
@@ -58,3 +74,5 @@ class Convertor {
     }
 
 }
+
+module.exports = Convertor;

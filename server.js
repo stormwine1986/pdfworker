@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const PdfWorker = require('./worker');
-const Convertor = require('./convertor')
+const Connector = require('./connector')
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
@@ -74,77 +74,77 @@ app.use((req, res, next) => {
     if (!req.timedout) next();
 });
 
-async function fetchCBMTaskDetails(taskId) {
-    try {
-        const cbmTaskUrl = `${process.env.CBM_BASE_URL}/api/v3/items/${taskId}`;
-        const cbmTaskResponse = await fetch(cbmTaskUrl, {
-            headers: {
-                Authorization: `Basic ${process.env.CBM_API_KEY}`,
-                ContentType: 'application/json'
-            }
-        });
+// async function fetchCBMTaskDetails(taskId) {
+//     try {
+//         const cbmTaskUrl = `${process.env.CBM_BASE_URL}/api/v3/items/${taskId}`;
+//         const cbmTaskResponse = await fetch(cbmTaskUrl, {
+//             headers: {
+//                 Authorization: `Basic ${process.env.CBM_API_KEY}`,
+//                 ContentType: 'application/json'
+//             }
+//         });
 
-        if (!cbmTaskResponse.ok) {
-            throw new Error(`Failed to fetch CBM task: ${cbmTaskResponse.status}`);
-        }
+//         if (!cbmTaskResponse.ok) {
+//             throw new Error(`Failed to fetch CBM task: ${cbmTaskResponse.status}`);
+//         }
 
-        return await cbmTaskResponse.json();
-    } catch (error) {
-        console.error('Error fetching CBM task details:', error);
-        throw error;
-    }
-}
+//         return await cbmTaskResponse.json();
+//     } catch (error) {
+//         console.error('Error fetching CBM task details:', error);
+//         throw error;
+//     }
+// }
 
-async function fetchPreviewMetadata(task_id, template_name) {
-    try {
-        const params = new URLSearchParams({
-            task_id: task_id
-        });
+// async function fetchPreviewMetadata(task_id, template_name) {
+//     try {
+//         const params = new URLSearchParams({
+//             task_id: task_id
+//         });
 
-        if (template_name?.trim()) {
-            params.append('template_name', template_name.trim());
-        }
+//         if (template_name?.trim()) {
+//             params.append('template_name', template_name.trim());
+//         }
 
-        const preview_metadata_url = `${process.env.CBM_BASE_URL}/dtas/preview-metadata.spr?${params.toString()}`;
+//         const preview_metadata_url = `${process.env.CBM_BASE_URL}/dtas/preview-metadata.spr?${params.toString()}`;
 
-        const response = await fetch(preview_metadata_url, {
-            headers: {
-                Authorization: `Basic ${process.env.CBM_API_KEY}`,
-                ContentType: 'application/json'
-            }
-        });
+//         const response = await fetch(preview_metadata_url, {
+//             headers: {
+//                 Authorization: `Basic ${process.env.CBM_API_KEY}`,
+//                 ContentType: 'application/json'
+//             }
+//         });
 
-        if (!response.ok) {
-            throw new Error(`Failed to fetch preview metadata: ${response.status}`);
-        }
+//         if (!response.ok) {
+//             throw new Error(`Failed to fetch preview metadata: ${response.status}`);
+//         }
 
-        return await response.json();
+//         return await response.json();
 
-    } catch (error) {
-        console.error('Error fetching Preview Metadata:', error);
-        throw error;
-    }
-}
+//     } catch (error) {
+//         console.error('Error fetching Preview Metadata:', error);
+//         throw error;
+//     }
+// }
 
-async function fetchTrackerDetails(trackerId) {
-    const cbmTrackerUrl = `${process.env.CBM_BASE_URL}/api/v3/trackers/${trackerId}`;
-    logger.info(`Fetching tracker ${trackerId} data, url = ${cbmTrackerUrl}`);
+// async function fetchTrackerDetails(trackerId) {
+//     const cbmTrackerUrl = `${process.env.CBM_BASE_URL}/api/v3/trackers/${trackerId}`;
+//     logger.info(`Fetching tracker ${trackerId} data, url = ${cbmTrackerUrl}`);
 
-    const cbmTrackerResponse = await fetch(cbmTrackerUrl, {
-        headers: {
-            Authorization: `Basic ${process.env.CBM_API_KEY}`,
-            ContentType: 'application/json'
-        }
-    });
+//     const cbmTrackerResponse = await fetch(cbmTrackerUrl, {
+//         headers: {
+//             Authorization: `Basic ${process.env.CBM_API_KEY}`,
+//             ContentType: 'application/json'
+//         }
+//     });
 
-    const trackerJson = await cbmTrackerResponse.json();
+//     const trackerJson = await cbmTrackerResponse.json();
 
-    if (cbmTrackerResponse.status !== 200) {
-        throw new Error(`Failed to fetch tracker: ${cbmTrackerResponse.status}`);
-    }
+//     if (cbmTrackerResponse.status !== 200) {
+//         throw new Error(`Failed to fetch tracker: ${cbmTrackerResponse.status}`);
+//     }
 
-    return trackerJson;
-}
+//     return trackerJson;
+// }
 
 app.get('/generate-pdf/:task_id/:user_id', async (req, res) => {
 
@@ -170,16 +170,18 @@ app.get('/generate-pdf/:task_id/:user_id', async (req, res) => {
             return res.status(401).send('Token expired');
         }
 
+        const connector = new Connector(task_id, logger);
+
         // from CBM fetch task detail
-        const taskDetails = await fetchCBMTaskDetails(task_id);
+        const taskDetails = await connector.fetchCBMTaskDetails();
         logger.info(`fetch data for task ${task_id}, task.name = ${taskDetails.name}`);
 
         // from CBM fetch tracker detail
-        const trackerJson = await fetchTrackerDetails(taskDetails.tracker.id);
+        const trackerJson = await connector.fetchTrackerDetails();
         logger.info(`Retrieved tracker ${trackerJson.id}, description = ${trackerJson.description}`);
 
         // Fetch preview metadata
-        const previewMetadata = await fetchPreviewMetadata(task_id, template_name);
+        const previewMetadata = await connector.fetchPreviewMetadata(template_name);
         logger.info(`Fetched preview metadata for task ${task_id}`, previewMetadata);
 
         const worker = new PdfWorker(pdfDir, logger);

@@ -6,6 +6,7 @@ const { v4: uuidv4 } = require('uuid');
 const { exec } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
+const Convertor = require('./convertor')
 
 require('dotenv').config();
 
@@ -87,6 +88,7 @@ class PdfWorker {
                 </div>
             `;
 
+            // 主内容
             pdfBuffer = await page.pdf({
                 format: 'A4',
                 printBackground: false,
@@ -106,18 +108,27 @@ class PdfWorker {
 
             await fs.writeFile(this.filePath, pdfBuffer);
 
-            // Check if previewMetadata exists and renderTOC is true
+            // 封面
+            const coverStartTime = performance.now();
+            const convertor = new Convertor(this.pdfDir, this.logger)
+            const cover = await convertor.process(`${this.configDir}/${previewMetadata.coverTemplate}`, previewMetadata.coverData)
+            const coverEndTime = performance.now();
+            this.logger.info(`PDF,${this.pdfId},cover generate took: ${(coverEndTime - coverStartTime) / 1000} seconds`);
+
+            // 目录
             if (previewMetadata && previewMetadata.renderTOC === true) {
                 try {
-                    const finalPdfBytes = await this.#generateTocAndMerge(browser);
+                    const finalPdfBytes = await this.#generateTocAndMerge(browser, cover);
                     return Buffer.from(finalPdfBytes);
                 } catch (error) {
                     this.logger.error(`PDF,${this.pdfId},TOC generation error: ${error}`);
-                    return pdfBuffer; // Return original if TOC generation fails
+                    return pdfBuffer;
                 }
             }
 
             return pdfBuffer;
+        } catch(error) {
+            this.logger.error("", error)
         } finally {
             if (browser) await browser.close();
             const totalEndTime = performance.now();
@@ -125,7 +136,7 @@ class PdfWorker {
         }
     }
 
-    async #generateTocAndMerge(browser) {
+    async #generateTocAndMerge(browser, cover) {
         const tocStartTime = performance.now();
 
         // Generate TOC
@@ -143,6 +154,8 @@ class PdfWorker {
 
         const mainDoc = await PDFDocument.load(pdfWithToc);
         const tocDoc = await PDFDocument.load(tocPdfBuffer);
+        const coverBuffer = await fs.readFile(cover);
+        const coverDoc = await PDFDocument.load(coverBuffer);
 
         const tocPages = await mainDoc.copyPages(tocDoc, tocDoc.getPageIndices());
         tocPages.reverse();
@@ -150,6 +163,9 @@ class PdfWorker {
         for (const page of tocPages) {
             mainDoc.insertPage(0, page);
         }
+
+        const coverPages = await mainDoc.copyPages(coverDoc, coverDoc.getPageIndices());
+        mainDoc.insertPage(0, coverPages[0])
 
         const finalPdfBytes = await mainDoc.save();
 
