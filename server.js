@@ -240,11 +240,11 @@ function getCount() {
     return Atomics.load(counter, 0); // 原子读取当前值
 }
 
-// Add cleanup handler
-process.on('SIGTERM', () => {
-    clearInterval(counterMonitor);
-    process.exit(0);
-});
+// // Add cleanup handler
+// process.on('SIGTERM', () => {
+//     clearInterval(counterMonitor);
+//     process.exit(0);
+// });
 
 // Health check endpoint
 app.get('/health', (req, res) => {

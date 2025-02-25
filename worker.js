@@ -73,11 +73,13 @@ class PdfWorker {
             const headerTemplate = previewMetadata?.headerTemplate || `
                 <div style="font-size: 10px; width: 100%; text-align: center; vertical-align: bottom; padding: 20px 0px;">
                     <span>${trackerData.description}</span>
+                    <div style="border-bottom: 1px solid black;width:inhert;margin-left: 50px;margin-right: 50px;">&nbsp</div>
                 </div>
             `;
 
             const footerTemplate = previewMetadata?.footerTemplate || `
                 <div style="font-size: 10px; width: 100%; text-align: center;">
+                    <div style="border-bottom: 1px solid black;width:inhert;margin-left: 50px;margin-right: 50px;">&nbsp</div>
                     <table style="width: 100%; padding: 0px 50px;">
                         <tr>
                             <td style="text-align: left; width: 30%;">@ copyright</td>
@@ -205,7 +207,8 @@ class PdfWorker {
             overflow: hidden;
         }
         .title {
-            white-space: nowrap;
+            white-space: break-word;
+            word-break: break-all;
         }
         .dots {
             margin: 0 4px;
