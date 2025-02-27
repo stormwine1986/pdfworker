@@ -90,6 +90,12 @@ class PdfWorker {
                 </div>
             `;
 
+            // 从页面中移除 class=_ignore 的元素
+            await page.evaluate(() => {
+                const elementsToRemove = document.querySelectorAll('._ignore');
+                elementsToRemove.forEach(element => element.remove());
+            });
+
             // 主内容
             pdfBuffer = await page.pdf({
                 format: 'A4',
@@ -111,16 +117,16 @@ class PdfWorker {
             await fs.writeFile(this.filePath, pdfBuffer);
 
             // 封面
-            const coverStartTime = performance.now();
-            const convertor = new Convertor(this.pdfDir, this.logger)
-            const cover = await convertor.process(`${this.configDir}/${previewMetadata.coverTemplate}`, previewMetadata.coverData)
-            const coverEndTime = performance.now();
-            this.logger.info(`PDF,${this.pdfId},cover generate took: ${(coverEndTime - coverStartTime) / 1000} seconds`);
+            // const coverStartTime = performance.now();
+            // const convertor = new Convertor(this.pdfDir, this.logger)
+            // const cover = await convertor.process(`${this.configDir}/${previewMetadata.coverTemplate}`, previewMetadata.coverData)
+            // const coverEndTime = performance.now();
+            // this.logger.info(`PDF,${this.pdfId},cover generate took: ${(coverEndTime - coverStartTime) / 1000} seconds`);
 
             // 目录
             if (previewMetadata && previewMetadata.renderTOC === true) {
                 try {
-                    const finalPdfBytes = await this.#generateTocAndMerge(browser, cover);
+                    const finalPdfBytes = await this.#generateTocAndMerge(browser, task_id, previewMetadata);
                     return Buffer.from(finalPdfBytes);
                 } catch (error) {
                     this.logger.error(`PDF,${this.pdfId},TOC generation error: ${error}`);
@@ -138,36 +144,68 @@ class PdfWorker {
         }
     }
 
-    async #generateTocAndMerge(browser, cover) {
-        const tocStartTime = performance.now();
+    async #generateTocAndMerge(browser, task_id, metadata) {
+        // 生成封面
+        const coverStartTime = performance.now();
+        const convertor = new Convertor(this.pdfDir, this.logger)
+        const cover = await convertor.process(`${this.configDir}/${metadata.coverTemplate}`, metadata.coverData)
+        const coverEndTime = performance.now();
+        this.logger.info(`PDF,${this.pdfId},cover generate took: ${(coverEndTime - coverStartTime) / 1000} seconds`);
 
-        // Generate TOC
+        // 生成变更记录
+        const historyStartTime = performance.now();
+        const page = await browser.newPage();
+        await page.goto(`${process.env.CBM_BASE_URL}/dtas/preview-history.spr?task_id=${task_id}`, { 
+            waitUntil: 'networkidle2' 
+        });
+        
+        const historyPdfBuffer = await page.pdf({
+            format: 'A4',
+            printBackground: false,
+            margin: {
+                top: '50px',
+                right: '50px',
+                bottom: '50px',
+                left: '50px'
+            }
+        });
+        
+        this.logger.info(`PDF,${this.pdfId},History generation took: ${(performance.now() - historyStartTime) / 1000} seconds`);
+
+        // 生成目录
+        const tocStartTime = performance.now();
         await execPromise(`pdftocgen "${this.filePath}" < "${this.recipePath}" > ${this.tocPath}`);
         await execPromise(`pdftocgen -v "${this.filePath}" < "${this.recipePath}" | pdftocio "${this.filePath}"`);
         const pdfWithToc = await fs.readFile(this.outputPath);
-
+        const tocPdfBuffer = await this.#generateTocPage(browser, this.tocPath);
         this.logger.info(`PDF,${this.pdfId},TOC generation took: ${(performance.now() - tocStartTime) / 1000} seconds`);
 
-        // Generate TOC page
-        const tocPdfBuffer = await this.#generateTocPage(browser, this.tocPath);
-
-        // Merge TOC and main PDF
+        // Merge 封面，变更记录，目录 and 主内容
         const mergeStartTime = performance.now();
 
         const mainDoc = await PDFDocument.load(pdfWithToc);
         const tocDoc = await PDFDocument.load(tocPdfBuffer);
         const coverBuffer = await fs.readFile(cover);
         const coverDoc = await PDFDocument.load(coverBuffer);
+        const historyDoc = await PDFDocument.load(historyPdfBuffer);
 
+        // 按顺序合并: 封面，变更记录，目录，主内容
+        const coverPages = await mainDoc.copyPages(coverDoc, coverDoc.getPageIndices());
+        const historyPages = await mainDoc.copyPages(historyDoc, historyDoc.getPageIndices());
         const tocPages = await mainDoc.copyPages(tocDoc, tocDoc.getPageIndices());
-        tocPages.reverse();
 
+        // Insert pages in reverse order at the beginning
+        tocPages.reverse();
         for (const page of tocPages) {
             mainDoc.insertPage(0, page);
         }
 
-        const coverPages = await mainDoc.copyPages(coverDoc, coverDoc.getPageIndices());
-        mainDoc.insertPage(0, coverPages[0])
+        historyPages.reverse();
+        for (const page of historyPages) {
+            mainDoc.insertPage(0, page);
+        }
+
+        mainDoc.insertPage(0, coverPages[0]);
 
         const finalPdfBytes = await mainDoc.save();
 
@@ -178,6 +216,7 @@ class PdfWorker {
             await fs.unlink(this.filePath);
             await fs.unlink(this.outputPath);
             await fs.unlink(this.tocPath);
+            await fs.unlink(cover);
         } catch (err) {
             console.error('Cleanup error:', err);
         }
