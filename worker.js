@@ -70,14 +70,14 @@ class PdfWorker {
             this.logger.info(`PDF,${this.pdfId},Title verified "${pageTitle}"`);
 
             // Use headerTemplate and footerTemplate from previewMetadata if available
-            const headerTemplate = previewMetadata?.headerTemplate || `
+            this.headerTemplate = previewMetadata?.headerTemplate || `
                 <div style="font-size: 10px; width: 100%; text-align: center; vertical-align: bottom; padding: 20px 0px;">
                     <span>${trackerData.description}</span>
                     <div style="border-bottom: 1px solid black;width:inhert;margin-left: 50px;margin-right: 50px;">&nbsp</div>
                 </div>
             `;
 
-            const footerTemplate = previewMetadata?.footerTemplate || `
+            this.footerTemplate = previewMetadata?.footerTemplate || `
                 <div style="font-size: 10px; width: 100%; text-align: center;">
                     <div style="border-bottom: 1px solid black;width:inhert;margin-left: 50px;margin-right: 50px;">&nbsp</div>
                     <table style="width: 100%; padding: 0px 50px;">
@@ -99,10 +99,10 @@ class PdfWorker {
             // 主内容
             pdfBuffer = await page.pdf({
                 format: 'A4',
-                printBackground: false,
+                printBackground: true,
                 displayHeaderFooter: true,
-                headerTemplate,
-                footerTemplate,
+                headerTemplate: this.headerTemplate,
+                footerTemplate: this.footerTemplate,
                 margin: {
                     top: '70px',
                     right: '50px',
@@ -161,11 +161,14 @@ class PdfWorker {
         
         const historyPdfBuffer = await page.pdf({
             format: 'A4',
-            printBackground: false,
+            printBackground: true,
+            displayHeaderFooter: true,
+            headerTemplate: this.headerTemplate,
+            footerTemplate: this.footerTemplate,
             margin: {
-                top: '50px',
+                top: '70px',
                 right: '50px',
-                bottom: '50px',
+                bottom: '70px',
                 left: '50px'
             }
         });
@@ -285,10 +288,13 @@ class PdfWorker {
 
         const pdfOptions = {
             format: 'A4',
+            displayHeaderFooter: true,
+            headerTemplate: this.headerTemplate,
+            footerTemplate: this.footerTemplate,
             margin: {
-                top: '50px',
+                top: '70px',
                 right: '50px',
-                bottom: '50px',
+                bottom: '70px',
                 left: '50px'
             },
             printBackground: false
