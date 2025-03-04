@@ -96,6 +96,22 @@ class PdfWorker {
                 elementsToRemove.forEach(element => element.remove());
             });
 
+            let landscape = false
+
+            // Get page body width in mm from page
+            const bodyWidth = await page.evaluate(() => {
+                const body = document.body;
+                const style = window.getComputedStyle(body);
+                const widthStr = style.width;
+                // Convert pixels to mm (1 inch = 25.4mm, 1 inch = 96px)
+                const widthPx = parseFloat(widthStr);
+                const widthMm = (widthPx * 25.4) / 96;
+                return widthMm;
+            });
+
+            // Set landscape to true if width is greater than A4 height (210mm)
+            landscape = bodyWidth > 210;
+
             // 主内容
             pdfBuffer = await page.pdf({
                 format: 'A4',
@@ -103,6 +119,7 @@ class PdfWorker {
                 displayHeaderFooter: true,
                 headerTemplate: this.headerTemplate,
                 footerTemplate: this.footerTemplate,
+                landscape: landscape, // Add this line to set landscape orientation
                 margin: {
                     top: '70px',
                     right: '50px',
