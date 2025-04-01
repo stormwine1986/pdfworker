@@ -185,20 +185,29 @@ app.get('/generate-pdf/:task_id/:user_id', async (req, res) => {
         logger.info(`Fetched preview metadata for task ${task_id}`, previewMetadata);
 
         const worker = new PdfWorker(pdfDir, logger);
-        // Pass previewMetadata to generatePdf if needed
-        const pdfBuffer = await worker.generatePdf(task_id, taskDetails, template_name, trackerJson, previewMetadata);
+        // 修改这里接收 pdfBuffer 和 metricData
+        const { pdfBuffer, metricData } = await worker.generatePdf(task_id, taskDetails, template_name, trackerJson, previewMetadata);
 
         const fileName = taskDetails.name ?
             `${taskDetails.name.replace(/[^a-zA-Z0-9-_]/g, '_')}.pdf` :
             'output.pdf';
 
-        res.set({
+        // 设置基本响应头
+        const headers = {
             'Content-Type': 'application/pdf',
             'Content-Disposition': `attachment; filename="${fileName}"`,
             'Content-Length': pdfBuffer.length,
             'Cache-Control': 'no-cache'
-        });
+        };
 
+        // 如果 metricData 存在且不为空，添加 metric 响应头
+        if (metricData && Object.keys(metricData).length > 0) {
+            for (const [key, value] of Object.entries(metricData)) {
+                headers[`x-metric-${key}`] = value;
+            }
+        }
+
+        res.set(headers);
         res.write(pdfBuffer);
         res.end();
     } catch (error) {

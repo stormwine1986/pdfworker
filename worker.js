@@ -69,6 +69,25 @@ class PdfWorker {
             }
             this.logger.info(`PDF,${this.pdfId},Title verified "${pageTitle}"`);
 
+            // Extract data from input elements within div#metric
+            const metricData = await page.evaluate(() => {
+                const metricDiv = document.getElementById('metric');
+                if (!metricDiv) return {};
+
+                const inputs = metricDiv.querySelectorAll('input');
+                const data = {};
+                
+                inputs.forEach(input => {
+                    if (input.id) {
+                        data[input.id] = input.value;
+                    }
+                });
+                
+                return data;
+            });
+
+            this.logger.info(`PDF,${this.pdfId},Extracted metric data:`, metricData);
+
             // Use headerTemplate and footerTemplate from previewMetadata if available
             this.headerTemplate = previewMetadata?.headerTemplate || `
                 <div style="font-size: 10px; width: 100%; text-align: center; vertical-align: bottom; padding: 20px 0px;">
@@ -144,14 +163,24 @@ class PdfWorker {
             if (previewMetadata && previewMetadata.renderTOC === true) {
                 try {
                     const finalPdfBytes = await this.#generateTocAndMerge(browser, task_id, previewMetadata);
-                    return Buffer.from(finalPdfBytes);
+                    return {
+                        pdfBuffer: Buffer.from(finalPdfBytes),
+                        metricData
+                    };
                 } catch (error) {
                     this.logger.error(`PDF,${this.pdfId},TOC generation error: ${error}`);
-                    return pdfBuffer;
+                    return {
+                        pdfBuffer,
+                        metricData
+                    };
                 }
             }
 
-            return pdfBuffer;
+            // Return both pdfBuffer and metricData
+            return {
+                pdfBuffer,
+                metricData
+            };
         } catch(error) {
             this.logger.error("", error)
         } finally {
